@@ -1,0 +1,127 @@
+--------------------------------------------24/08/2025----------------------------------------------------
+
+
+
+---create a customer table as a source table and any DML operations on this table will be tracked by a stream object.
+
+create or replace table customer (id  number,
+                                  first_name varchar , 
+                                  last_name varchar,
+                                  DOB date, 
+                                  active_flag boolean,
+                                  city varchar);
+
+---insert record into table 
+
+INSERT INTO customer (id, first_name, last_name, DOB, active_flag, city) 
+                      VALUES
+                            (1, 'Neha',    'Sharma',   DATE '1995-04-10', TRUE,  'Pune'),
+                            (2, 'Vikas',   'Patil',    DATE '1993-07-22', TRUE,  'Mumbai'),
+                            (3, 'Amit',    'Deshmukh', DATE '1989-01-15', FALSE, 'Nagpur'),
+                            (4, 'Sneha',   'Joshi',    DATE '1998-09-09', TRUE,  'Nashik'),
+                            (5, 'Rohit',   'Kumar',    DATE '1990-12-25', FALSE, 'Delhi'),
+                            (6, 'Priya',   'Singh',    DATE '1997-06-05', TRUE,  'Bengaluru'),
+                            (7, 'Aniket',  'Kulkarni', DATE '1992-11-18', TRUE,  'Hyderabad'),
+                            (8, 'Pooja',   'Mishra',   DATE '1996-08-02', FALSE, 'Chennai'),
+                            (9, 'Siddhesh','Ugale',    DATE '1994-03-30', TRUE,  'Surat'),
+                            (10,'Kiran',   'Verma',    DATE '1991-02-14', TRUE,  'Indore');
+
+            
+---select and see the record of sourece table 
+select * from customer;
+
+
+---lets create a stram object to track the changes in source table 
+
+create or replace stream customer_stream on table customer;
+
+---lets execute select sql on customer stream table
+
+select * from customer_stream;
+
+
+---now we can see the 3 additional columns added to the table named.
+       ---METADATA$action
+       ---METADATA$isupdate
+       ---METADATA$ROW_ID
+
+
+---there is a no record as a insert , update or delete perform on customer source table 
+
+--now lets perform DML operations
+
+---start with inserting 2 new records 
+
+-- Insert 2 more records
+INSERT INTO customer (id, first_name, last_name, DOB, active_flag, city)
+                VALUES
+                (11, 'Meena',  'Rathod',   DATE '1999-10-20', TRUE,  'Ahmedabad'),
+                (12, 'Rajesh', 'Yadav',    DATE '1988-05-12', FALSE, 'Jaipur');
+
+
+SELECT * FROM customer_stream;
+
+select * from customer;
+
+
+----delete a row with id=8
+
+delete from customer where id =8;
+
+---lets see how select statement fatches the result
+
+select * from customer_stream;
+select * from customer;
+
+---lets updating two records 
+
+update customer set city = 'Ujjain' where id=12;
+update customer set active_flag=false where id = 6;
+
+---lets see the how select statement fetches the result 
+
+select * from customer_stream;
+select * from customer;
+
+---so for the insert and delete. 1 record per operation will be available in the stream object.
+---for update there are two records per update operations .
+
+
+---the actions meta data field capture what is DML operations is performed (Insert,update ,delete)
+---when it comes to update DML, it is represented as delete follwed  by an insert and that's how it is captured.
+
+--How to see strem info
+
+--check the context
+ 
+select current_database(),current_schema();
+
+---shows all stream within database and schema
+
+ show streams;
+
+ desc stream customer_stream;
+
+
+
+ ----combine both source and target table using merge statement.
+
+CREATE OR REPLACE TABLE customer_target LIKE customer;
+
+
+ MERGE INTO customer_target t
+USING customer_stream s
+ON t.id = s.id
+WHEN MATCHED AND s.metadata$action = 'DELETE' THEN DELETE
+WHEN MATCHED AND s.metadata$action = 'UPDATE' THEN 
+    UPDATE SET 
+        t.first_name  = s.first_name,
+        t.last_name   = s.last_name,
+        t.dob         = s.dob,
+        t.active_flag = s.active_flag,
+        t.city        = s.city
+WHEN NOT MATCHED AND s.metadata$action = 'INSERT' THEN
+    INSERT (id, first_name, last_name, dob, active_flag, city)
+    VALUES (s.id, s.first_name, s.last_name, s.dob, s.active_flag, s.city);
+
+select * from customer;
